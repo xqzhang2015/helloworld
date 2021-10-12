@@ -25,6 +25,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 )
@@ -36,12 +37,11 @@ const (
 
 func main() {
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithCodec(MyCodec{}))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	c := pb.NewGreeterClient(conn)
 
 	// Contact the server and print out its response.
 	name := defaultName
@@ -50,9 +50,17 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: name})
+
+	req := &pb.HelloRequest{Name: name}
+	in, _ := proto.Marshal(req)
+	out := new(MyStruct)
+
+	err = conn.Invoke(ctx, "/helloworld.Greeter/SayHello", in, out)
 	if err != nil {
 		log.Fatalf("could not greet: %v", err)
 	}
-	log.Printf("Greeting: %s", r.GetMessage())
+
+	reply := new(pb.HelloReply)
+	proto.Unmarshal(out.GetData(), reply)
+	log.Printf("Greeting: %s", reply.GetMessage())
 }
