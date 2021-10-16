@@ -24,3 +24,6 @@ func main() {
 
 // for sample.jpg
 // File type: jpg. MIME: image/jpeg, MIME: types.MIME{Type:"image", Subtype:"jpeg", Value:"image/jpeg"}
+
+// more doc info
+// https://dev.to/sistoi/golang-mime-type-handling-3fnd
