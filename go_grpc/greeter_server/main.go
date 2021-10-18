@@ -21,15 +21,18 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net"
+	"time"
 
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 )
 
-const (
-	port = ":50051"
+var (
+	inflight atomic.Int32
 )
 
 // server is used to implement helloworld.GreeterServer.
@@ -39,15 +42,37 @@ type server struct {
 
 // SayHello implements helloworld.GreeterServer
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	log.Printf("Received: %v", in.GetName())
-	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
+	inflight.Inc()
+	defer inflight.Dec()
+	select {
+	case <-time.After(100 * time.Millisecond):
+		//
+	}
+
+	// log.Printf("Received: %v", in.GetName())
+	// return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
+	return &pb.HelloReply{Message: "H"}, nil
 }
 
 func main() {
-	lis, err := net.Listen("tcp", port)
+	port := flag.String("port", ":50051", "the port")
+	flag.Parse()
+
+	lis, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	go func() {
+		for {
+			select {
+			case <-time.After(3 * time.Second):
+				log.Printf("inflight: %d", inflight.Load())
+			}
+		}
+	}()
+
+	// s := grpc.NewServer(grpc.MaxConcurrentStreams(100))
 	s := grpc.NewServer()
 	pb.RegisterGreeterServer(s, &server{})
 	log.Printf("server listening at %v", lis.Addr())
