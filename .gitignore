@@ -36,3 +36,4 @@ client
 server
 
 .DS_Store
+*.swp
