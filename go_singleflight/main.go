@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -24,14 +25,17 @@ func main() {
 	testDoChan()
 }
 
-func myDo(url string) {
+func myHead(url string) func() (interface{}, error) {
 	fn := func() (interface{}, error) {
 		res, err := http.Head(url)
 		return res, err
 	}
+	return fn
+}
 
+func myDo(url string) {
 	urlKey := url + ":test"
-	v, err, shared := myGroup.Do(urlKey, fn)
+	v, err, shared := myGroup.Do(urlKey, myHead(url))
 	fmt.Printf("key: %v, v: %v (%T), err: %v, shared: %v\n", urlKey, v.(*http.Response).Status, v, err, shared)
 }
 
@@ -67,11 +71,51 @@ func testDo() {
 	wg.Wait()
 }
 
-func myDoChan() {
+func myDoChan(ctx context.Context, url string) {
+	urlKey := url + ":test"
+	ch, called := myGroup.DoChan(urlKey, myHead(url))
 
+	fmt.Printf("fn is called: %v\n", called)
+
+	select {
+	case <-ctx.Done():
+		if myGroup.ForgetUnshared(urlKey) {
+			fmt.Printf("I'm the only goroutine looking up this key")
+		} else {
+			go func() {
+				<-ch
+				// child-ctx.Cancel()
+			}()
+		}
+	case r := <-ch:
+		fmt.Printf("key: %v, v: %v (%T), err: %v, shared: %v\n", urlKey, r.Val.(*http.Response).Status, r.Val, r.Err, r.Shared)
+	}
 }
 
 func testDoChan() {
-	fmt.Println("=== testDo() ===")
+	fmt.Println("=== testDoChan() ===")
 
+	var wg sync.WaitGroup
+	url1 := "https://golang.org"
+	url2 := "https://www.baidu.com"
+
+	wg.Add(1)
+	go func(url string) {
+		myDoChan(context.Background(), url)
+		wg.Done()
+	}(url1)
+
+	wg.Add(1)
+	go func(url string) {
+		myDoChan(context.Background(), url)
+		wg.Done()
+	}(url1)
+
+	wg.Add(1)
+	go func(url string) {
+		myDoChan(context.Background(), url)
+		wg.Done()
+	}(url2)
+
+	wg.Wait()
 }
